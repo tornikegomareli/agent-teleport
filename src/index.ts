@@ -8,8 +8,9 @@ import { convertCommand } from "./commands/convert"
 import type { Reader } from "./readers/base"
 import type { Writer } from "./writers/base"
 
-// Imported as a module so bun's bundler inlines it at compile time
 import pkg from "../package.json"
+
+import { resolveDirectory } from "./util/resolve-directory"
 
 function getReader(name: string, dbPath?: string): Reader {
   switch (name) {
@@ -60,7 +61,8 @@ yargs(hideBin(process.argv))
     async (args) => {
       try {
         const reader = getReader(args.from, args.db)
-        await listCommand(reader, args.directory, args.verbose)
+        const directory = args.directory || await resolveDirectory(reader)
+        await listCommand(reader, directory, args.verbose)
       } catch (err: any) {
         console.error(`\x1b[31mError:\x1b[0m ${err.message}`)
         if (err.message.includes("database not found")) {
@@ -123,6 +125,7 @@ yargs(hideBin(process.argv))
       try {
         const reader = getReader(args.from, args.db)
         const writer = getWriter(args.to)
+        const directory = args.directory || await resolveDirectory(reader)
         await convertCommand({
           reader,
           writer,
@@ -131,7 +134,7 @@ yargs(hideBin(process.argv))
           fromJson: args.fromJson,
           dryRun: args.dryRun,
           verbose: args.verbose,
-          directory: args.directory,
+          directory,
         })
       } catch (err: any) {
         console.error(`\x1b[31mError:\x1b[0m ${err.message}`)
