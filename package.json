@@ -1,0 +1,52 @@
+{
+  "name": "agent-teleport",
+  "version": "0.1.0",
+  "description": "Convert AI coding agent sessions between formats. OpenCode, Claude Code, and more.",
+  "author": "Tornike Gomareli",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tornikegomareli/agent-teleport.git"
+  },
+  "homepage": "https://github.com/tornikegomareli/agent-teleport",
+  "bugs": {
+    "url": "https://github.com/tornikegomareli/agent-teleport/issues"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "session",
+    "converter",
+    "opencode",
+    "claude-code",
+    "cli",
+    "teleport"
+  ],
+  "type": "module",
+  "bin": {
+    "agent-teleport": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "scripts": {
+    "start": "bun src/index.ts",
+    "build": "bun build --compile src/index.ts --outfile agent-teleport",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yargs": "^17.7.2",
+    "@clack/prompts": "^0.10.0"
+  },
+  "devDependencies": {
+    "@types/yargs": "^17.0.33",
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  }
+}
