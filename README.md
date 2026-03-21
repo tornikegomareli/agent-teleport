@@ -71,7 +71,7 @@ agent-teleport convert --from-json exported-session.json
 agent-teleport convert <session-id> --db /path/to/opencode.db
 ```
 
-After converting, open Claude Code in the same project directory — the imported sessions will appear in your conversation history.
+After converting, open Claude Code in the same project directory and run it with --continue flag.
 
 ### Flags
 
