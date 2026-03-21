@@ -80,9 +80,3 @@ When converting, map your agent's concepts to these blocks. Key patterns:
 ```bash
 bun test
 ```
-
-### Code Style
-
-- No obvious comments — only comment non-obvious architecture decisions
-- TypeScript strict mode
-- Prefer explicit types at module boundaries, infer internally
