@@ -6,11 +6,11 @@
 [![Tests](https://img.shields.io/badge/tests-60%20passing-brightgreen)]()
 [![GitHub release](https://img.shields.io/github/v/release/tornikegomareli/agent-teleport)](https://github.com/tornikegomareli/agent-teleport/releases)
 
-Convert AI coding agent sessions between formats. Switch agents without losing your conversation history.
+Convert AI coding agent sessions between formats, switch between agents without losing conversation history
 
 Currently supports: **OpenCode → Claude Code**
 
-## Why
+## Why?
 
 When you switch between AI coding agents (OpenCode, Claude Code, Codex, etc.), all conversation history is lost. agent-teleport reads sessions from one agent's storage and writes them into another agent's format, so you can pick up right where you left off.
 
