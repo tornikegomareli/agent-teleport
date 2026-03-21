@@ -26,10 +26,11 @@ jobs:
       - name: Test
         run: bun test
 
+      - name: Configure npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
       - name: Publish to npm
         run: bun publish --access public
-        env:
-          BUN_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   build-binaries:
     runs-on: ${{ matrix.os }}
