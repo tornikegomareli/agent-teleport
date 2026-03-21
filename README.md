@@ -1,5 +1,11 @@
 # agent-teleport
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript)](https://www.typescriptlang.org)
+[![Tests](https://img.shields.io/badge/tests-60%20passing-brightgreen)]()
+[![GitHub release](https://img.shields.io/github/v/release/tornikegomareli/agent-teleport)](https://github.com/tornikegomareli/agent-teleport/releases)
+
 Convert AI coding agent sessions between formats. Switch agents without losing your conversation history.
 
 Currently supports: **OpenCode → Claude Code**
@@ -122,4 +128,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add readers/writers for new ag
 
 ## License
 
-MIT
+[MIT](LICENSE)
