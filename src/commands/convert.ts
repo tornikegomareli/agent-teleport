@@ -3,6 +3,7 @@ import type { Reader } from "../readers/base"
 import type { Writer } from "../writers/base"
 import { OpenCodeReader } from "../readers/opencode"
 import type { IRSession } from "../ir/types"
+import { estimateTokens } from "../util/summarize"
 
 interface ConvertOptions {
   reader: Reader
@@ -75,8 +76,12 @@ export async function convertCommand(opts: ConvertOptions) {
   let converted = 0
   for (const session of sessions) {
     if (verbose) {
+      const tokens = estimateTokens(session.messages)
       console.log(`Converting: ${session.title} (${session.id})`)
-      console.log(`  Messages: ${session.messages.length}`)
+      console.log(`  Messages: ${session.messages.length}, ~${Math.round(tokens / 1000)}K tokens`)
+      if (tokens > 80_000) {
+        console.log(`  Compacting: session exceeds token limit, generating summary`)
+      }
     }
 
     const outputPath = await writer.writeSession(session, dryRun)
