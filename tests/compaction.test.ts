@@ -40,104 +40,70 @@ async function dryRunLines(writer: ClaudeCodeWriter, session: IRSession): Promis
 
 describe("compaction", () => {
   test("small sessions are NOT compacted", async () => {
-    // ~50 messages x 100 chars = ~1250 tokens, well under 80K threshold
     const session = makeSession(50, 100)
     const writer = new ClaudeCodeWriter()
     const lines = await dryRunLines(writer, session)
 
-    const boundary = lines.find((l) => l.subtype === "compact_boundary")
-    expect(boundary).toBeUndefined()
-
-    const summary = lines.find((l) => l.isCompactSummary === true)
-    expect(summary).toBeUndefined()
+    // All messages should be present
+    const msgs = lines.filter((l) => l.type === "user" || l.type === "assistant")
+    expect(msgs.length).toBe(50)
   })
 
-  test("large sessions ARE compacted", async () => {
+  test("large sessions are compacted to summary + tail", async () => {
     // 200 messages x 2000 chars = ~100K tokens, over 80K threshold
     const session = makeSession(200, 2000)
     const writer = new ClaudeCodeWriter()
     const lines = await dryRunLines(writer, session)
 
-    const boundary = lines.find((l) => l.subtype === "compact_boundary")
-    expect(boundary).toBeTruthy()
-    expect(boundary.type).toBe("system")
-    expect(boundary.content).toBe("Conversation compacted")
-    expect(boundary.compactMetadata.trigger).toBe("auto")
-    expect(boundary.compactMetadata.preTokens).toBeGreaterThan(80000)
-
-    const summary = lines.find((l) => l.isCompactSummary === true)
-    expect(summary).toBeTruthy()
-    expect(summary.type).toBe("user")
-    expect(summary.isVisibleInTranscriptOnly).toBe(true)
-    expect(summary.message.content).toContain("This session is being continued")
+    // Should be much fewer lines than 200
+    const msgs = lines.filter((l) => l.type === "user" || l.type === "assistant")
+    expect(msgs.length).toBeLessThan(200)
+    expect(msgs.length).toBeLessThanOrEqual(42) // ~40 tail + 1 summary
   })
 
-  test("compact_boundary has correct structure", async () => {
+  test("first line is the summary user message", async () => {
     const session = makeSession(200, 2000)
     const writer = new ClaudeCodeWriter()
     const lines = await dryRunLines(writer, session)
 
-    const boundary = lines.find((l) => l.subtype === "compact_boundary")
+    const first = lines[0]
+    expect(first.type).toBe("user")
+    expect(first.parentUuid).toBeNull()
 
-    expect(boundary.parentUuid).toBeNull()
-    expect(boundary.logicalParentUuid).toBeTruthy()
-    expect(boundary.isSidechain).toBe(false)
-    expect(boundary.level).toBe("info")
-    expect(boundary.isMeta).toBe(false)
-    expect(boundary.uuid).toBeTruthy()
+    const content = first.message.content
+    expect(Array.isArray(content)).toBe(true)
+    expect(content[0].text).toContain("This session is being continued")
   })
 
-  test("summary message chains from boundary", async () => {
+  test("summary includes session context", async () => {
     const session = makeSession(200, 2000)
     const writer = new ClaudeCodeWriter()
     const lines = await dryRunLines(writer, session)
 
-    const boundaryIdx = lines.findIndex((l) => l.subtype === "compact_boundary")
-    const summary = lines[boundaryIdx + 1]
-
-    expect(summary.isCompactSummary).toBe(true)
-    expect(summary.parentUuid).toBe(lines[boundaryIdx].uuid)
+    const summaryText = lines[0].message.content[0].text
+    expect(summaryText).toContain("Compaction test")
+    expect(summaryText).toContain("/tmp/test-compact")
+    expect(summaryText).toContain("Continue the conversation")
   })
 
-  test("messages after boundary chain from summary", async () => {
+  test("tail messages chain from summary", async () => {
     const session = makeSession(200, 2000)
     const writer = new ClaudeCodeWriter()
     const lines = await dryRunLines(writer, session)
 
-    const summaryIdx = lines.findIndex((l) => l.isCompactSummary === true)
-    const nextMsg = lines[summaryIdx + 1]
-
-    // Next message should parent to summary
-    expect(nextMsg.parentUuid).toBe(lines[summaryIdx].uuid)
+    // Second line should parent to the summary (first line)
+    expect(lines[1].parentUuid).toBe(lines[0].uuid)
   })
 
-  test("tail messages are included after compaction", async () => {
+  test("parent chain is intact through tail", async () => {
     const session = makeSession(200, 2000)
     const writer = new ClaudeCodeWriter()
     const lines = await dryRunLines(writer, session)
 
-    const summaryIdx = lines.findIndex((l) => l.isCompactSummary === true)
-    const afterSummary = lines.slice(summaryIdx + 1).filter(
-      (l) => l.type === "user" || l.type === "assistant",
-    )
-
-    // Should have tail messages after summary
-    expect(afterSummary.length).toBeGreaterThan(0)
-    expect(afterSummary.length).toBeLessThanOrEqual(40)
-  })
-
-  test("parent chain is intact across compaction boundary", async () => {
-    const session = makeSession(200, 2000)
-    const writer = new ClaudeCodeWriter()
-    const lines = await dryRunLines(writer, session)
-
-    // Check all non-system lines have valid parent chains
     const uuids = new Set<string>()
     let broken = 0
     for (const line of lines) {
       if (line.uuid) uuids.add(line.uuid)
-      // compact_boundary has parentUuid: null (by design)
-      if (line.subtype === "compact_boundary") continue
       if (line.type === "last-prompt") continue
       if (line.parentUuid && !uuids.has(line.parentUuid)) broken++
     }
@@ -153,16 +119,18 @@ describe("compaction", () => {
     expect(lastPrompt).toBeTruthy()
   })
 
-  test("total line count includes pre-compaction + boundary + summary + tail + last-prompt", async () => {
+  test("output is summary + tail messages + last-prompt only", async () => {
     const session = makeSession(200, 2000)
     const writer = new ClaudeCodeWriter()
     const lines = await dryRunLines(writer, session)
 
-    const conversationMessages = lines.filter(
-      (l) => (l.type === "user" || l.type === "assistant") && !l.isCompactSummary,
-    ).length
-    // All 200 original messages + boundary + summary + last-prompt = 203
-    expect(conversationMessages).toBe(200)
-    expect(lines.length).toBe(200 + 3) // boundary + summary + last-prompt
+    const msgs = lines.filter((l) => l.type === "user" || l.type === "assistant")
+    const lastPrompts = lines.filter((l) => l.type === "last-prompt")
+
+    // summary (1) + tail (<=40) + last-prompt (1)
+    expect(msgs.length).toBeGreaterThan(1)
+    expect(msgs.length).toBeLessThanOrEqual(42)
+    expect(lastPrompts.length).toBe(1)
+    expect(lines.length).toBe(msgs.length + 1) // msgs + last-prompt
   })
 })

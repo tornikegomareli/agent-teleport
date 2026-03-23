@@ -17,8 +17,6 @@ const CLAUDE_CODE_VERSION = "2.1.0"
 // threshold to leave room for the system prompt and new messages.
 const COMPACTION_TOKEN_THRESHOLD = 80_000
 
-// Keep the last N messages after compaction so Claude has recent context
-const TAIL_MESSAGES_AFTER_COMPACTION = 40
 
 export class ClaudeCodeWriter implements Writer {
   name = "claude-code"
@@ -51,7 +49,7 @@ export class ClaudeCodeWriter implements Writer {
     const needsCompaction = totalTokens > COMPACTION_TOKEN_THRESHOLD
 
     if (needsCompaction) {
-      return this.generateCompactedLines(session, sessionId, totalTokens, outputPath)
+      return this.generateCompactedLines(session, sessionId, totalTokens)
     }
 
     return this.generateAllLines(session, sessionId)
@@ -59,108 +57,58 @@ export class ClaudeCodeWriter implements Writer {
 
   /**
    * For sessions that exceed the token threshold:
-   * 1. Write all messages as normal (they stay in the JSONL file for reference)
-   * 2. Insert a compact_boundary marker
-   * 3. Insert a summary user message
-   * 4. Write the tail messages that Claude will actually see
+   * 1. Insert a compact_boundary marker (no pre-boundary messages — Claude Code
+   *    would try to process them all and hit API limits)
+   * 2. Insert a summary user message with the condensed conversation
+   * 3. Write the tail messages that Claude will actually see
    */
   private generateCompactedLines(
     session: IRSession,
     sessionId: string,
     preTokens: number,
-    outputPath: string,
   ): Record<string, unknown>[] {
     const lines: Record<string, unknown>[] = []
-    let lastUuid: string | null = null
 
-    // Find the split point: keep the last N messages
-    const splitIndex = Math.max(0, session.messages.length - TAIL_MESSAGES_AFTER_COMPACTION)
-
-    // Ensure we split at a user message boundary (don't start with a tool_result user message)
-    let adjustedSplit = splitIndex
-    for (let i = splitIndex; i < session.messages.length; i++) {
-      const msg = session.messages[i]
-      if (msg.role === "user") {
-        const hasOnlyToolResults = msg.content.every((c) => c.type === "tool_result")
-        if (!hasOnlyToolResults) {
-          adjustedSplit = i
-          break
-        }
-      }
-    }
-
-    const summarizedMessages = session.messages.slice(0, adjustedSplit)
-    const tailMessages = session.messages.slice(adjustedSplit)
-
-    // Phase 1: Write all pre-compaction messages (visible in transcript only)
-    for (const message of summarizedMessages) {
-      const uuid = generateUuid()
-      const timestamp = new Date(message.createdAt).toISOString()
-      const line = this.buildMessageLine(message, uuid, lastUuid, sessionId, session.directory, timestamp)
-      if (line) {
-        lines.push(line)
-        lastUuid = uuid
-      }
-    }
-
-    // Phase 2: Insert compact_boundary
-    const boundaryUuid = generateUuid()
-    const boundaryTimestamp = new Date().toISOString()
+    const summaryUuid = generateUuid()
+    const summaryText = generateSummary(session, session.messages)
     lines.push({
       parentUuid: null,
-      logicalParentUuid: lastUuid,
       isSidechain: false,
-      userType: "external",
-      cwd: session.directory,
+      uuid: summaryUuid,
+      timestamp: new Date(session.createdAt).toISOString(),
       sessionId,
       version: CLAUDE_CODE_VERSION,
-      type: "system",
-      subtype: "compact_boundary",
-      content: "Conversation compacted",
-      isMeta: false,
-      timestamp: boundaryTimestamp,
-      uuid: boundaryUuid,
-      level: "info",
-      compactMetadata: {
-        trigger: "auto",
-        preTokens,
-      },
-    })
-
-    // Phase 3: Insert summary user message
-    const summaryUuid = generateUuid()
-    const summaryText = generateSummary(session, summarizedMessages)
-    lines.push({
-      parentUuid: boundaryUuid,
-      isSidechain: false,
-      userType: "external",
       cwd: session.directory,
-      sessionId,
-      version: CLAUDE_CODE_VERSION,
+      userType: "external",
       type: "user",
       message: {
         role: "user",
-        content: summaryText,
+        content: [{ type: "text", text: summaryText }],
       },
-      isVisibleInTranscriptOnly: true,
-      isCompactSummary: true,
-      uuid: summaryUuid,
-      timestamp: boundaryTimestamp,
     })
-    lastUuid = summaryUuid
 
-    // Phase 4: Write tail messages (these Claude will actually process)
-    for (const message of tailMessages) {
-      const uuid = generateUuid()
-      const timestamp = new Date(message.createdAt).toISOString()
-      const line = this.buildMessageLine(message, uuid, lastUuid, sessionId, session.directory, timestamp)
-      if (line) {
-        lines.push(line)
-        lastUuid = uuid
-      }
-    }
+    const ackUuid = generateUuid()
+    lines.push({
+      type: "assistant",
+      parentUuid: summaryUuid,
+      isSidechain: false,
+      uuid: ackUuid,
+      timestamp: new Date(session.createdAt).toISOString(),
+      sessionId,
+      version: CLAUDE_CODE_VERSION,
+      cwd: session.directory,
+      userType: "external",
+      requestId: `req_teleport_${ackUuid.slice(0, 12)}`,
+      message: {
+        role: "assistant",
+        model: "claude-sonnet-4-20250514",
+        content: [{ type: "text", text: "I have the full context from the previous conversation. Ready to continue." }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    })
 
-    // Add last-prompt marker
     this.addLastPrompt(lines, session, sessionId)
 
     return lines
