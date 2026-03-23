@@ -1,6 +1,6 @@
 {
   "name": "agent-teleport",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Convert AI coding agent sessions between formats. OpenCode, Claude Code, and more.",
   "author": "Tornike Gomareli",
   "license": "MIT",
